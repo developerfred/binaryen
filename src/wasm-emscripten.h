@@ -54,8 +54,8 @@ public:
   // __main_argc_argv.  Emscripten in non-standalone mode expects that function
   // to be exported as main.  This function renames __main_argc_argv to main
   // as expected by emscripten.
-  // It also remove the extra `__main_void` export that llvm adds in th case
-  // of main not takeing any arguments.
+  // It also removes the extra `__main_void` export that llvm adds in the case
+  // of main not taking any arguments.
   void fixMainNameMangling();
 
   // Emits the data segments to a file. The file contains data from address base
