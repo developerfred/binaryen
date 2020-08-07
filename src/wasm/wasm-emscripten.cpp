@@ -739,7 +739,7 @@ static void printSignatures(std::ostream& o, const std::set<Signature>& c) {
   o << "]";
 }
 
-static bool mainReadsParams(Module& module) {
+bool EmscriptenGlueGenerator::mainReadsParams() {
   // In the new llvm name mangling scheme for `main` there are
   // two possible ways that main is handled:
   // 1. Main take two args and gets mangled to `__main_argc_argv`
@@ -748,24 +748,18 @@ static bool mainReadsParams(Module& module) {
 
   // If we have a __main_void` alias that means we know that
   // main take no args so we are done.
-  if (module.getExportOrNull("__main_void")) {
+  if (hasMainVoid) {
     return false;
   }
 
-  // Handle the old/legacy sceme where main always takes 2 args
-  // but interall the 0-arg version is called a __original_main
-  auto* exp = module.getExportOrNull("main");
-  if (!exp) {
-    exp = module.getExportOrNull("__main_argc_argv");
-  }
-
+  auto* exp = wasm.getExportOrNull("main");
   // No main exported.
   if (!exp || exp->kind != ExternalKind::Function) {
     return false;
   }
 
   // If main take no args then we we are done.
-  auto* main = module.getFunction(exp->value);
+  auto* main = wasm.getFunction(exp->value);
   if (main->sig.params == Type::none) {
     return false;
   }
@@ -797,14 +791,6 @@ std::string EmscriptenGlueGenerator::generateEmscriptenMetadata(
 
   std::stringstream meta;
   meta << "{\n";
-
-  // Sadly llvm marks the __main_void alias of main which causes it to
-  // exported because with emscripten llvm we equate llvm's concept
-  // "used" with exporting.
-  // In order to avoid thie extra export we simply remove it here.
-  if (wasm.getExportOrNull("__main_void")) {
-    wasm.removeExport("__main_void");
-  }
 
   AsmConstWalker emAsmWalker = fixEmAsmConstsAndReturnWalker(wasm);
 
@@ -921,7 +907,7 @@ std::string EmscriptenGlueGenerator::generateEmscriptenMetadata(
   // of the __wasi_args_get and __wasi_args_sizes_get syscalls allow us to
   // DCE to the argument handling JS code instead.
   if (!standalone) {
-    meta << "  \"mainReadsParams\": " << int(mainReadsParams(wasm)) << ",\n";
+    meta << "  \"mainReadsParams\": " << int(mainReadsParams()) << ",\n";
   }
 
   meta << "  \"features\": [";
@@ -959,16 +945,26 @@ void EmscriptenGlueGenerator::separateDataSegments(Output* outfile,
   wasm.memory.segments.clear();
 }
 
-void EmscriptenGlueGenerator::renameMainArgcArgv() {
-  // If an export call ed __main_argc_argv exists rename it to main
+void EmscriptenGlueGenerator::fixMainNameMangling() {
+  // If an export called __main_argc_argv exists rename it to main
   Export* ex = wasm.getExportOrNull("__main_argc_argv");
-  if (!ex) {
-    BYN_TRACE("renameMain: __main_argc_argv not found\n");
-    return;
+  if (ex) {
+    BYN_TRACE("fixMainMangling: renaming __main_argc_argv\n");
+    hasMainArgcArgv = true;
+    ex->name = "main";
+    wasm.updateMaps();
+    ModuleUtils::renameFunction(wasm, "__main_argc_argv", "main");
   }
-  ex->name = "main";
-  wasm.updateMaps();
-  ModuleUtils::renameFunction(wasm, "__main_argc_argv", "main");
+
+  // Sadly llvm marks the __main_void a "used" alias of main which causes
+  // it to exported because with emscripten llvm we equate llvm's concept
+  // "used" with exporting.
+  // In order to avoid thie extra export we simply remove it here.
+  if (wasm.getExportOrNull("__main_void")) {
+    hasMainVoid = true;
+    BYN_TRACE("fixMainMangling: removing __main_void\n");
+    wasm.removeExport("__main_void");
+  }
 }
 
 } // namespace wasm

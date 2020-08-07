@@ -54,7 +54,9 @@ public:
   // __main_argc_argv.  Emscripten in non-standalone mode expects that function
   // to be exported as main.  This function renames __main_argc_argv to main
   // as expected by emscripten.
-  void renameMainArgcArgv();
+  // It also remove the extra `__main_void` export that llvm adds in th case
+  // of main not takeing any arguments.
+  void fixMainNameMangling();
 
   // Emits the data segments to a file. The file contains data from address base
   // onwards (we must pass in base, as we can't tell it from the wasm - the
@@ -65,12 +67,15 @@ public:
   void generateDynCallThunk(Signature sig);
 
 private:
+  bool mainReadsParams();
   Module& wasm;
   Builder builder;
   Address stackPointerOffset;
   bool useStackPointerGlobal;
   bool standalone;
   bool sideModule;
+  bool hasMainVoid = false;
+  bool hasMainArgcArgv = false;
   // Used by generateDynCallThunk to track all the dynCall functions created
   // so far.
   std::unordered_set<Signature> sigs;
