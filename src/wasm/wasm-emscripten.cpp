@@ -743,7 +743,7 @@ static bool mainReadsParams(Module& module) {
   // In the new llvm name mangling scheme for `main` there are
   // two possible ways that main is handled:
   // 1. Main take two args and gets mangled to `__main_argc_argv`
-  // 2. Main take no args and it not mangled but and alaias is
+  // 2. Main take no args and it not mangled but an alaias is
   //    added called `__main_void`
 
   // If we have a __main_void` alias that means we know that
